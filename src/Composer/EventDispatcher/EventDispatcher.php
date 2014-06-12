@@ -246,7 +246,14 @@ class EventDispatcher
                     $exec = $this->getPhpExecCommand() . ' ' . substr($exec, 5);
                 }
 
-                if (0 !== ($exitCode = $this->process->execute($exec))) {
+                if ($event instanceof FolderEventInterface) {
+                    $output = null;
+                    $exitCode = $this->process->execute($exec, $output, $event->getCurrentWorkingDirectory());
+                } else {
+                    $exitCode = $this->process->execute($exec);
+                }
+
+                if (0 !== $exitCode) {
                     $this->io->writeError(sprintf('<error>Script %s handling the %s event returned with error code '.$exitCode.'</error>', $callable, $event->getName()), true, IOInterface::QUIET);
 
                     throw new ScriptExecutionException('Error Output: '.$this->process->getErrorOutput(), $exitCode);
