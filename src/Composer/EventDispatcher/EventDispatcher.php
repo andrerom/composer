@@ -188,7 +188,15 @@ class EventDispatcher
                 } else {
                     $this->io->writeError(sprintf('> %s', $exec));
                 }
-                if (0 !== ($exitCode = $this->process->execute($exec))) {
+
+                if ($event instanceof FolderEventInterface) {
+                    $output = null;
+                    $exitCode = $this->process->execute($exec, $output, $event->getCurrentWorkingDirectory());
+                } else {
+                    $exitCode = $this->process->execute($exec);
+                }
+
+                if (0 !== $exitCode) {
                     $this->io->writeError(sprintf('<error>Script %s handling the %s event returned with an error</error>', $callable, $event->getName()));
 
                     throw new \RuntimeException('Error Output: '.$this->process->getErrorOutput(), $exitCode);
