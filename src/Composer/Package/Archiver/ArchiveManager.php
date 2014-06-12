@@ -94,6 +94,9 @@ class ArchiveManager
     /**
      * Create an archive of the specified package.
      *
+     * @uses archivePrepare
+     * @uses archiveSourceDump
+     *
      * @param  PackageInterface          $package       The package to archive
      * @param  string                    $format        The format of the archive (zip, tar, ...)
      * @param  string                    $targetDir     The directory where to build the archive
@@ -101,7 +104,7 @@ class ArchiveManager
      *                                                  the package name. Note that the format will be appended to this name
      * @param  bool                      $ignoreFilters Ignore filters when looking for files in the package
      * @throws \InvalidArgumentException
-     * @throws \RuntimeException
+     * @throws \RuntimeException         {@see archiveSourceDump()}
      * @return string                    The path of the created archive
      */
     public function archive(PackageInterface $package, $format, $targetDir, $fileName = null, $ignoreFilters = false)
@@ -110,20 +113,30 @@ class ArchiveManager
             throw new \InvalidArgumentException('Format must be specified');
         }
 
-        // Search for the most appropriate archiver
-        $usableArchiver = null;
-        foreach ($this->archivers as $archiver) {
-            if ($archiver->supports($format, $package->getSourceType())) {
-                $usableArchiver = $archiver;
-                break;
-            }
+        $path = $this->archivePrepare($package, $format, $targetDir, $pathIsTarget, $fileName);
+        if (!$pathIsTarget) {
+            $path = $this->archiveSourceDump($package, $format, $targetDir, $path, $ignoreFilters);
         }
 
-        // Checks the format/source type are supported before downloading the package
-        if (null === $usableArchiver) {
-            throw new \RuntimeException(sprintf('No archiver found to support %s format', $format));
-        }
+        return $path;
+    }
 
+    /**
+     * Prepare for archive of the specified package.
+     *
+     * Depends on {@see archiveSourceDump()} being called afterwards if $returnedPathIsTarget is false.
+     *
+     * @param  PackageInterface          $package   The package to archive
+     * @param  string                    $format    The format of the archive (zip, tar, ...)
+     * @param  string                    $targetDir The directory where to build the archive
+     * @param  bool                      $returnedPathIsTarget Flags if returned path is target (already exists) or
+     *                                              source path (target does not exist yet or overwriteFiles is true)
+     * @param  string|null               $fileName  The relative file name to use for the archive, or null to generate
+     *                                              the package name. Note that the format will be appended to this name
+     * @return string                    The path of the created archive if already exists or the source
+     */
+    public function archivePrepare(PackageInterface $package, $format, $targetDir, &$returnedPathIsTarget = false, $fileName = null)
+    {
         $filesystem = new Filesystem();
         if (null === $fileName) {
             $packageName = $this->getPackageFilename($package);
@@ -137,6 +150,7 @@ class ArchiveManager
         $filesystem->ensureDirectoryExists(dirname($target));
 
         if (!$this->overwriteFiles && file_exists($target)) {
+            $returnedPathIsTarget = true;
             return $target;
         }
 
@@ -164,6 +178,42 @@ class ArchiveManager
                 }
             }
         }
+
+        return $sourcePath;
+    }
+    /**
+     * Dump an archive of the specified package.
+     *
+     * Depends on {@see archivePrepare()} already being called, and used to generate $sourcePath.
+     *
+     * @param  PackageInterface          $package   The package to archive
+     * @param  string                    $format    The format of the archive (zip, tar, ...)
+     * @param  string                    $targetDir The directory where to build the archive
+     * @param  string                    $sourcePath The directory where source content exists
+     * @param  bool                      $ignoreFilters Ignore filters when looking for files in the package
+     * @throws \RuntimeException
+     * @return string                    The path of the created archive
+     */
+    public function archiveSourceDump(PackageInterface $package, $format, $targetDir, $sourcePath, $ignoreFilters = false)
+    {
+        $filesystem = new Filesystem();
+        $packageName = $this->getPackageFilename($package);
+
+        // Search for the most appropriate archiver
+        $usableArchiver = null;
+        foreach ($this->archivers as $archiver) {
+            if ($archiver->supports($format, $package->getSourceType())) {
+                $usableArchiver = $archiver;
+                break;
+            }
+        }
+
+        // Checks the format/source type are supported before downloading the package
+        if (null === $usableArchiver) {
+            throw new \RuntimeException(sprintf('No archiver found to support %s format', $format));
+        }
+
+        $target = realpath($targetDir).'/'.$packageName.'.'.$format;
 
         // Create the archive
         $tempTarget = sys_get_temp_dir().'/composer_archive'.uniqid().'.'.$format;
