@@ -103,7 +103,6 @@ class ArchiveManager
      *                                                  the package name. Note that the format will be appended to this name
      * @param  bool                      $ignoreFilters Ignore filters when looking for files in the package
      * @throws \InvalidArgumentException
-     * @throws \RuntimeException
      * @return string                    The path of the created archive
      */
     public function archive(PackageInterface $package, $format, $targetDir, $fileName = null, $ignoreFilters = false)
@@ -112,23 +111,9 @@ class ArchiveManager
             throw new \InvalidArgumentException('Format must be specified');
         }
 
-        // Search for the most appropriate archiver
-        $usableArchiver = null;
-        foreach ($this->archivers as $archiver) {
-            if ($archiver->supports($format, $package->getSourceType())) {
-                $usableArchiver = $archiver;
-                break;
-            }
-        }
-
-        // Checks the format/source type are supported before downloading the package
-        if (null === $usableArchiver) {
-            throw new \RuntimeException(sprintf('No archiver found to support %s format', $format));
-        }
-
         $path = $this->archivePrepare($package, $format, $targetDir, $pathIsTarget, $fileName);
         if (!$pathIsTarget) {
-            $path = $this->archiveSourceDump($package, $usableArchiver, $format, $targetDir, $path, $usableArchiver, $ignoreFilters);
+            $path = $this->archiveSourceDump($package, $format, $targetDir, $path, $ignoreFilters);
         }
 
         return $path;
@@ -203,15 +188,28 @@ class ArchiveManager
      * @param  string                    $format    The format of the archive (zip, tar, ...)
      * @param  string                    $targetDir The directory where to build the archive
      * @param  string                    $sourcePath The directory where source content exists
-     * @param  ArchiverInterface         $usableArchiver Archiver
      * @param  bool                      $ignoreFilters Ignore filters when looking for files in the package
-     *
+     * @throws \RuntimeException
      * @return string                    The path of the created archive
      */
-    public function archiveSourceDump(PackageInterface $package, $format, $targetDir, $sourcePath, ArchiverInterface $usableArchiver, $ignoreFilters = false)
+    public function archiveSourceDump(PackageInterface $package, $format, $targetDir, $sourcePath, $ignoreFilters = false)
     {
         $filesystem = new Filesystem();
         $packageName = $this->getPackageFilename($package);
+
+        // Search for the most appropriate archiver
+        $usableArchiver = null;
+        foreach ($this->archivers as $archiver) {
+            if ($archiver->supports($format, $package->getSourceType())) {
+                $usableArchiver = $archiver;
+                break;
+            }
+        }
+
+        // Checks the format/source type are supported before downloading the package
+        if (null === $usableArchiver) {
+            throw new \RuntimeException(sprintf('No archiver found to support %s format', $format));
+        }
 
         $target = realpath($targetDir).'/'.$packageName.'.'.$format;
 
