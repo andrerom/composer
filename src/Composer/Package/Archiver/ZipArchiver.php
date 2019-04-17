@@ -44,6 +44,8 @@ class ZipArchiver implements ArchiverInterface
                     $zip->addEmptyDir($localname);
                 } else {
                     $zip->addFile($filepath, $localname);
+                    $perms = fileperms($filepath);
+                    $zip->setExternalAttributesName($filepath, ZipArchive::OPSYS_UNIX, $perms << 16);
                 }
             }
             if ($zip->close()) {
